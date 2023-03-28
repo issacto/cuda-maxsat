@@ -25,7 +25,7 @@ using namespace std::chrono;
 #define totalThreadsIsland N / threadsInBlockIsland 
 #define totalBlocksIsland (totalThreadsIsland + threadsPerBlock - 1) / threadsPerBlock 
 #define selectionMode true   // elitism or ranking selection
-#define crossoverMode 1   // single or uniform crossover
+#define crossoverMode 1   //  uniform or single-point or two-points crossover
 #define mutationMode false   // single or double mutation
 #define mutationKeep false   // exempt the best parent to be mutated
 #define mutationThreshold 0.5 // between 0 and 1
@@ -50,12 +50,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort =
     }
 }
 
-__constant__ int d_satSize;
+__constant__ int d_satSize; // the number of clauses
 
-__constant__ int d_maxBit;
+__constant__ int d_maxBit; // variables (bits) needed for the problem set
 
-__constant__ short d_satSets[10000 * SATCLAUSES]; // maxSize
+__constant__ short d_satSets[10000 * SATCLAUSES]; //problem set literals
 
+// initialise a state with a random state
 __global__ void init(curandState_t *states, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -65,6 +66,7 @@ __global__ void init(curandState_t *states, int max)
     }
 }
 
+// initialise a random integer number
 __global__ void random_casting_int(curandState_t *states, int *numbers, int maxIndex, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -74,6 +76,7 @@ __global__ void random_casting_int(curandState_t *states, int *numbers, int maxI
     }
 }
 
+// initialise a random float number 
 __global__ void random_casting_float(curandState_t *states, float *numbers, int maxIndex, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -83,6 +86,7 @@ __global__ void random_casting_float(curandState_t *states, float *numbers, int 
     }
 }
 
+// initialise a parent which is of type unsigned long long int
 __global__ void random_casting_parent(curandState_t *states, unsigned long long int *numbers, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -92,6 +96,7 @@ __global__ void random_casting_parent(curandState_t *states, unsigned long long 
     }
 }
 
+// evaluate the fitness value of a chromosome
 __global__ void evaluation(unsigned long long int *parents, unsigned int *parentVals, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -105,6 +110,7 @@ __global__ void evaluation(unsigned long long int *parents, unsigned int *parent
                 if ((d_satSets[i * SATCLAUSES + ii] < 0 && (!((parents[id] >> abs(d_satSets[i * SATCLAUSES + ii]) - 1) & 1))) ||
                     (d_satSets[i * SATCLAUSES + ii] > 0 && ((parents[id] >> abs(d_satSets[i * SATCLAUSES + ii]) - 1) & 1)))
                 {
+                    // if sat sets literal is negative and chromosome index is 0 or sat sets literal is positive and chromosome index is 1
                     tempVal += 1;
                     break;
                 }
@@ -121,30 +127,34 @@ __global__ void mutation(unsigned long long int *parents, float *mutateProb, int
     {
         if (!isMutationKeep || id != bestIndex)
         {
-            // Single
             if (mode)
             {
+                // Single Mutation
                 if (mutateProb[id] > mutationThreshold)
                 {
                     if (!((parents[id] >> mutateIndex[id]) & 1))
                     {
+                        // if chromsome idth index is 0
                         parents[id] |= (1ULL << mutateIndex[id]);
                     }
                     else
                     {
+                        // if chromsome idth index is 1
                         parents[id] &= ~(1ULL << mutateIndex[id]);
                     }
                 }
             }
             else
             {
-                // Double
+                // Double Mutation
                 if (!((parents[id] >> mutateIndex[id]) & 1))
                 {
+                    // if chromsome idth index is 0
                     parents[id] |= (1ULL << mutateIndex[id]);
                 }
                 else
                 {
+                    // if chromsome idth index is 1
                     parents[id] &= ~(1ULL << mutateIndex[id]);
                 }
                 int nextId = id + 1;
@@ -154,10 +164,12 @@ __global__ void mutation(unsigned long long int *parents, float *mutateProb, int
                 {
                     if (!((parents[id] >> mutateIndex[nextId]) & 1))
                     {
+                        // if chromsome nextIdth index is 0
                         parents[id] |= (1ULL << mutateIndex[nextId]);
                     }
                     else
                     {
+                        // if chromsome nextIdth index is 1
                         parents[id] &= ~(1ULL << mutateIndex[nextId]);
                     }
                 }
@@ -166,6 +178,7 @@ __global__ void mutation(unsigned long long int *parents, float *mutateProb, int
     }
 }
 
+// crossover for single-point and two-points crossover
 __global__ void crossover_fixed(unsigned long long int *parents, unsigned long long int *blockBestParents, int *splitIndex, int* length,int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -178,17 +191,19 @@ __global__ void crossover_fixed(unsigned long long int *parents, unsigned long l
         {
             if ((blockBestParents[bId] >> i) & 1)
             {
-                // bestparent i index=1
+                // if selected chromsome ith index is 1
                 if (!((parents[id] >> i) & 1))
                 {
+                    // if chromsome ith index is 0
                     parents[id] |= (1ULL << i);
                 }
             }
             else
             {
-                // bestparent i index=0
+                // if selected chromsome ith index is 0
                 if ((parents[id] >> i) & 1)
                 {
+                    // if chromsome ith index is 1
                     parents[id] &= ~(1ULL << i);
                 }
             }
@@ -206,17 +221,19 @@ __global__ void crossover_uniform(unsigned long long *parents, unsigned long lon
         {
             if ((blockBestParents[bId] >> i) & 1)
             {
-                // bestparent i index=1
+                // if selected chromsome ith index is 1
                 if (!((parents[id] >> i) & 1))
                 {
+                    // if chromsome ith index is 0
                     parents[id] |= (1ULL << i);
                 }
             }
             else
             {
-                // bestparent i index=0
+                // if selected chromsome ith index is 0
                 if ((parents[id] >> i) & 1)
                 {
+                    // if chromsome ith index is 1
                     parents[id] &= ~(1ULL << i);
                 }
             }
@@ -232,6 +249,7 @@ __global__ void selection_elitism(unsigned long long int *parents, unsigned int 
         int bId = id * threadsInBlockIsland;
         unsigned int tmpLargestVal = 0;
         unsigned long long int tmpLargestPar = 0;
+        // iterate over the threads in an island
         for (int i = 0; i < threadsInBlockIsland; i++)
         {
             if (parentVals[bId + i] > tmpLargestVal)
@@ -240,6 +258,7 @@ __global__ void selection_elitism(unsigned long long int *parents, unsigned int 
                 tmpLargestVal = parentVals[bId + i];
             }
         }
+        // select the chromosome with the highest fitness value at the corresponding blockBestParent array
         blockBestParent[id] = tmpLargestPar;
     }
 }
@@ -250,10 +269,9 @@ __global__ void selection_wheel(unsigned long long int *parents, unsigned int *p
     if (max > id)
     {
         int bId = id * threadsInBlockIsland;
-        // wheel
         unsigned int tmpLowestVal = d_satSize+100;
         unsigned int totalVal = 0;
-        // find lowest
+        // find the lowest and total fitness value
         for (int i = 0; i < threadsInBlockIsland; i++)
         {
             if (parentVals[bId + i] < tmpLowestVal)
@@ -262,14 +280,15 @@ __global__ void selection_wheel(unsigned long long int *parents, unsigned int *p
             }
             totalVal += parentVals[bId + i];
         }
-        // calculate percentage
         unsigned int base = totalVal - threadsInBlockIsland * tmpLowestVal;
+        // store the cumulative proabability 
         float tmpProb = 0;
         for (int i = 0; i < threadsInBlockIsland; i++)
         {
             tmpProb += (parentVals[bId + i] - tmpLowestVal) / base;
             if (tmpProb > wheelProbs[id])
             {
+                //select the chromosome when the probability is higher than the randomly generated probability
                 blockBestParent[id] = parents[bId + i];
                 break;
             }
@@ -280,7 +299,6 @@ __global__ void selection_wheel(unsigned long long int *parents, unsigned int *p
 __global__ void internalReOrder(unsigned long long int *parents, unsigned int *parentVals, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
-    // crossover
     if (max > id)
     {
         int bId = id * threadsInBlockIsland;
@@ -288,6 +306,7 @@ __global__ void internalReOrder(unsigned long long int *parents, unsigned int *p
         int lowestVal = d_satSize+100;;
         for (int i = 0; i < threadsInBlockIsland; i++)
         {
+            // store the chromsomes with the lowest and highest fitness values
             if (i == 0)
             {
                 lowestVal = parentVals[bId + i];
@@ -309,11 +328,12 @@ __global__ void internalReOrder(unsigned long long int *parents, unsigned int *p
                 }
             }
         }
-
         unsigned long long int tmpLowest = parents[lowestIndex];
         unsigned long long int tmpHighest = parents[highestIndex];
+        // swap the position of the first position with that of the chromosome with lowest fitness values
         parents[lowestIndex] = parents[bId];
         parents[bId] = tmpLowest;
+         // swap the position of the last position with that of the chromosome with highest fitness values
         parents[highestIndex] = parents[bId + threadsInBlockIsland - 1];
         parents[bId + threadsInBlockIsland - 1] = tmpHighest;
     }
@@ -324,7 +344,7 @@ __global__ void migration(unsigned long long int *parents, int max)
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     if (max > id)
     {
-        // block migration replacing worst
+        // Migration - the last chromosome replaces the first chromosome of the next block
         int index = (id + 1) * threadsInBlockIsland - 1;
         if (index >= N)
             index = index - N;
@@ -345,12 +365,14 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
     int tmpMaxBit = 0;
     while (getline(firstFileRead, tempText))
     {
+        // process each line
         if (tempText[0] == 'p'){
+            // if the line is about problem definition
             istringstream iss(tempText);
             string s;
             int tmpIndex =0 ;
             while ( getline( iss, s, ' ' ) ) {
-                // cout<<tmpIndex<< ": " <<s.c_str()<<endl;
+                // process strings splitted by space in a line
                 if(tmpIndex==2){
                     tmpMaxBit = atoi(s.c_str());
                 }else if(tmpIndex==3){
@@ -366,12 +388,13 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
     short *h_satSets = new short[tmpSatSize*SATCLAUSES];
     while (getline(secondFileRead, tempText))
     {
+        // process each line
         if (tempText[0] == 'p'){
             isCount = true;
         }else if (isCount  && tempText[0] != 'c')
         {
+            // iterate over all the literals in a line
             string tmpStr;
-
             for (int i = 0; i < tempText.size(); i++)
             {
 
@@ -399,8 +422,8 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
     return h_satSets;
 }
 
+// print the bits of a chromosome
 void printBits(unsigned long long int parent, int max){
-
     cout<< parent<<endl;
     for(int i =0;i<max;i++){
         if((parent >> i) & 1){
@@ -420,7 +443,8 @@ void printOccupancyMetrics(int blockSize, int minGridSize, string funcName){
     cout<<"Min Grid Size: "<<minGridSize<<endl;
 }
 
-void getMaxBlockSize(){
+//print the max block and grid size for all the kernel functions in the program
+void printMaxBlockSize(){
     int blockSize;   
     int minGridSize;
     int max_active_blocks;
@@ -428,10 +452,11 @@ void getMaxBlockSize(){
     cudaGetDeviceProperties(&prop, 0);
     int num_sm = 0;
     cudaDeviceGetAttribute(&num_sm, cudaDevAttrMultiProcessorCount, 0);
-    cout<<"Number of Streaming Multiprocessor:" << num_sm<<endl;
+    cout<<"Number of Streaming Multiprocessor: " << num_sm<<endl;
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, init, 0, 0);
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks, init, blockSize, 0);
-    cout<<"Here we go : " << max_active_blocks<<endl;
+    cout<<"Maximum active blocks:  " << max_active_blocks<<endl;
+    cout<<"--------------------------------------"<<endl;
     printOccupancyMetrics(blockSize,minGridSize,"init");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, random_casting_int, 0, 0);
     printOccupancyMetrics(blockSize,minGridSize,"random_casting_int");
@@ -460,8 +485,7 @@ void getMaxBlockSize(){
 
 int main(int argc, char **argv)
 {
-    // getMaxBlockSize();
-    // int noBlocks=(N + threadsInBlockIsland - 1) / threadsInBlockIsland;
+    // printMaxBlockSize();
     srand(time(0));
     auto start = high_resolution_clock::now();
     ofstream ResultArrFile("resultArr.txt");
@@ -490,7 +514,6 @@ int main(int argc, char **argv)
     curandState_t *d_parent_states;
     gpuErrchk(cudaMalloc((void **)&d_parent_states, N * sizeof(curandState_t)));
     unsigned long long int *d_parents;
-    // y = (unsigned long long int*)malloc(N*sizeof( unsigned long long int));
     gpuErrchk(cudaMalloc(&d_parents, N * sizeof(unsigned long long int)));
 
     init<<<N / threadsPerBlock, threadsPerBlock>>>(d_parent_states, N);
@@ -568,14 +591,12 @@ int main(int argc, char **argv)
 
         int tempLargestParentIndex = 0;
         unsigned int tempLargestParentValue = 0;
-        // get maximum value
         evaluation<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_parentVals, N);
         gpuErrchk(cudaPeekAtLastError());
         cudaMemcpy(h_parentVals, d_parentVals, N * sizeof(unsigned int), cudaMemcpyDeviceToHost);
         cudaMemcpy(h_parents, d_parents, N * sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
         for (int i = 0; i < N; i++)
         {
-            // cout<<parentVal[i]<<endl;
             if (h_parentVals[i] > tempLargestParentValue)
             {
                 tempLargestParentValue = h_parentVals[i];
@@ -583,9 +604,7 @@ int main(int argc, char **argv)
             }
         }
 
-        /*
-            Print Round Result
-        */
+        // print the highest fitness value each round if it is debug mode
        if(debugMode){
         ResultArrFile << roundIndex << " " << tempLargestParentValue << endl;
         cout << roundIndex << ". " << "answer: ";
@@ -596,6 +615,7 @@ int main(int argc, char **argv)
 
         if (tempLargestParentValue > res_maxParentVal)
         {
+            // if a highest fitness value is found this round
             res_maxParentVal = tempLargestParentValue;
             res_maxParent = h_parents[tempLargestParentIndex];
             res_maxRound = roundIndex;
@@ -628,12 +648,14 @@ int main(int argc, char **argv)
         // crossover
         if (crossoverMode)
         {
+            // single-point crossover
             init<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, N);
             gpuErrchk(cudaPeekAtLastError());
             random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, d_crossover_index, h_maxBit, N);
             gpuErrchk(cudaPeekAtLastError());
             crossover_fixed<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_block_bests, d_crossover_index, d_crossover_index, N);
         }else if (crossoverMode==2){
+            // two-point crossover
             init<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, N);
             gpuErrchk(cudaPeekAtLastError());
             random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, d_crossover_index, h_maxBit, N);
@@ -646,6 +668,7 @@ int main(int argc, char **argv)
         }
         else
         {
+            // uniform crossover
             crossover_uniform<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_block_bests, N);
         }
         gpuErrchk(cudaPeekAtLastError());
