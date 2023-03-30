@@ -597,6 +597,7 @@ int main(int argc, char **argv)
         cudaMemcpy(h_parents, d_parents, N * sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
         for (int i = 0; i < N; i++)
         {
+            // If the chromsome with the highest fitness value in that round is found
             if (h_parentVals[i] > tempLargestParentValue)
             {
                 tempLargestParentValue = h_parentVals[i];
@@ -604,8 +605,8 @@ int main(int argc, char **argv)
             }
         }
 
-        // print the highest fitness value each round if it is debug mode
        if(debugMode){
+        // print the highest fitness value each round if it is debug mode
         ResultArrFile << roundIndex << " " << tempLargestParentValue << endl;
         cout << roundIndex << ". " << "answer: ";
         cout << tempLargestParentValue << "  parent: ";
@@ -615,7 +616,7 @@ int main(int argc, char **argv)
 
         if (tempLargestParentValue > res_maxParentVal)
         {
-            // if a highest fitness value is found this round
+            // If the chromsome with the highest fitness value so far is found
             res_maxParentVal = tempLargestParentValue;
             res_maxParent = h_parents[tempLargestParentIndex];
             res_maxRound = roundIndex;
@@ -623,8 +624,8 @@ int main(int argc, char **argv)
             roundsWithoutImprovement = -1;
             if(!debugMode){
                 if(h_satSize==res_maxParentVal){
+                    // If all the clauses are satisfied
                     cout<< "s OPTIMUM FOUND"<<endl;
-                    // value
                     cout<< "v ";
                     printBits(res_maxParent,h_maxBit);
                     cout<<endl;
