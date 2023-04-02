@@ -19,19 +19,18 @@ using namespace std::chrono;
     Parameters
 */
 #define threadsPerBlock 1024
-#define N threadsPerBlock * 216     // perents
+#define N threadsPerBlock * 216 // perents
 #define roundsPerMigration 10
-#define threadsInBlockIsland 32 
-#define totalThreadsIsland N / threadsInBlockIsland 
-#define totalBlocksIsland (totalThreadsIsland + threadsPerBlock - 1) / threadsPerBlock 
-#define selectionMode true   // elitism or ranking selection
-#define crossoverMode 1   //  uniform or single-point or two-points crossover
-#define mutationMode false   // single or double mutation
-#define mutationKeep false   // exempt the best parent to be mutated
-#define mutationThreshold 0.5 // between 0 and 1
-#define terminationMode true // terminate by rounds without improvement or by time
+#define threadsInBlockIsland 32                                                        // number of threads in an island
+#define totalThreadsIsland N / threadsInBlockIsland                                    // number of islands
+#define totalBlocksIsland (totalThreadsIsland + threadsPerBlock - 1) / threadsPerBlock // number of blocks for islands
+#define selectionMode true                                                             // elitism or ranking selection
+#define crossoverMode 2                                                                //  uniform or single-point or two-points crossover
+#define mutationMode false                                                             // single or double mutation
+#define mutationKeep false                                                             // exempt the best parent to be mutated
+#define mutationThreshold 0.5                                                          // between 0 and 1
+#define terminationMode true                                                           // terminate by rounds without improvement or by time
 #define maxRound 20000
-#define maxSecond 60
 #define debugMode false // print rounds or print MAXSAT evaluation format
 
 // https://stackoverflow.com/questions/65293876/cuda-gpuassert-an-illegal-memory-access-was-encountered
@@ -54,7 +53,7 @@ __constant__ int d_satSize; // the number of clauses
 
 __constant__ int d_maxBit; // variables (bits) needed for the problem set
 
-__constant__ short d_satSets[10000 * SATCLAUSES]; //problem set literals
+__constant__ short d_satSets[10000 * SATCLAUSES]; // problem set literals
 
 // initialise a state with a random state
 __global__ void init(curandState_t *states, int max)
@@ -76,7 +75,7 @@ __global__ void random_casting_int(curandState_t *states, int *numbers, int maxI
     }
 }
 
-// initialise a random float number 
+// initialise a random float number
 __global__ void random_casting_float(curandState_t *states, float *numbers, int maxIndex, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -179,14 +178,15 @@ __global__ void mutation(unsigned long long int *parents, float *mutateProb, int
 }
 
 // crossover for single-point and two-points crossover
-__global__ void crossover_fixed(unsigned long long int *parents, unsigned long long int *blockBestParents, int *splitIndex, int* length,int max)
+__global__ void crossover_fixed(unsigned long long int *parents, unsigned long long int *blockBestParents, int *splitIndex, int *length, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
-    int startingPosition = splitIndex[id]-length[id];
-    if(startingPosition<0) startingPosition=0;
+    int startingPosition = splitIndex[id] - length[id];
+    if (startingPosition < 0)
+        startingPosition = 0;
     if (max > id)
     {
-        int bId =  blockIdx.x;
+        int bId = blockIdx.x;
         for (int i = startingPosition; i < splitIndex[id]; i++)
         {
             if ((blockBestParents[bId] >> i) & 1)
@@ -269,7 +269,7 @@ __global__ void selection_wheel(unsigned long long int *parents, unsigned int *p
     if (max > id)
     {
         int bId = id * threadsInBlockIsland;
-        unsigned int tmpLowestVal = d_satSize+100;
+        unsigned int tmpLowestVal = d_satSize + 100;
         unsigned int totalVal = 0;
         // find the lowest and total fitness value
         for (int i = 0; i < threadsInBlockIsland; i++)
@@ -281,14 +281,14 @@ __global__ void selection_wheel(unsigned long long int *parents, unsigned int *p
             totalVal += parentVals[bId + i];
         }
         unsigned int base = totalVal - threadsInBlockIsland * tmpLowestVal;
-        // store the cumulative proabability 
+        // store the cumulative proabability
         float tmpProb = 0;
         for (int i = 0; i < threadsInBlockIsland; i++)
         {
             tmpProb += (parentVals[bId + i] - tmpLowestVal) / base;
             if (tmpProb > wheelProbs[id])
             {
-                //select the chromosome when the probability is higher than the randomly generated probability
+                // select the chromosome when the probability is higher than the randomly generated probability
                 blockBestParent[id] = parents[bId + i];
                 break;
             }
@@ -303,7 +303,8 @@ __global__ void internalReOrder(unsigned long long int *parents, unsigned int *p
     {
         int bId = id * threadsInBlockIsland;
         int lowestIndex, highestIndex, highestVal = 0;
-        int lowestVal = d_satSize+100;;
+        int lowestVal = d_satSize + 100;
+        ;
         for (int i = 0; i < threadsInBlockIsland; i++)
         {
             // store the chromsomes with the lowest and highest fitness values
@@ -333,7 +334,7 @@ __global__ void internalReOrder(unsigned long long int *parents, unsigned int *p
         // swap the position of the first position with that of the chromosome with lowest fitness values
         parents[lowestIndex] = parents[bId];
         parents[bId] = tmpLowest;
-         // swap the position of the last position with that of the chromosome with highest fitness values
+        // swap the position of the last position with that of the chromosome with highest fitness values
         parents[highestIndex] = parents[bId + threadsInBlockIsland - 1];
         parents[bId + threadsInBlockIsland - 1] = tmpHighest;
     }
@@ -366,32 +367,40 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
     while (getline(firstFileRead, tempText))
     {
         // process each line
-        if (tempText[0] == 'p'){
+        if (tempText[0] == 'p')
+        {
             // if the line is about problem definition
             istringstream iss(tempText);
             string s;
-            int tmpIndex =0 ;
-            while ( getline( iss, s, ' ' ) ) {
+            int tmpIndex = 0;
+            while (getline(iss, s, ' '))
+            {
                 // process strings splitted by space in a line
-                if(tmpIndex==2){
+                if (tmpIndex == 2)
+                {
                     tmpMaxBit = atoi(s.c_str());
-                }else if(tmpIndex==3){
+                }
+                else if (tmpIndex == 3)
+                {
                     tmpSatSize = atoi(s.c_str());
                 }
-                if(!(tmpIndex>=2 && atoi(s.c_str())==0)) tmpIndex+=1;
+                if (!(tmpIndex >= 2 && atoi(s.c_str()) == 0))
+                    tmpIndex += 1;
             }
             break;
         }
     }
     bool isCount = false;
     int index = 0;
-    short *h_satSets = new short[tmpSatSize*SATCLAUSES];
+    short *h_satSets = new short[tmpSatSize * SATCLAUSES];
     while (getline(secondFileRead, tempText))
     {
         // process each line
-        if (tempText[0] == 'p'){
+        if (tempText[0] == 'p')
+        {
             isCount = true;
-        }else if (isCount  && tempText[0] != 'c')
+        }
+        else if (isCount && tempText[0] != 'c')
         {
             // iterate over all the literals in a line
             string tmpStr;
@@ -415,7 +424,7 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
             }
         };
     }
-    *h_maxBit =tmpMaxBit;
+    *h_maxBit = tmpMaxBit;
     *h_satSize = tmpSatSize;
     firstFileRead.close();
     secondFileRead.close();
@@ -423,64 +432,71 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
 }
 
 // print the bits of a chromosome
-void printBits(unsigned long long int parent, int max){
-    cout<< parent<<endl;
-    for(int i =0;i<max;i++){
-        if((parent >> i) & 1){
-            cout<<(i+1);
-        }else{
-             cout<<(i+1)*-1;
+void printBits(unsigned long long int parent, int max)
+{
+    cout << parent << endl;
+    for (int i = 0; i < max; i++)
+    {
+        if ((parent >> i) & 1)
+        {
+            cout << (i + 1);
         }
-        cout<<" ";
+        else
+        {
+            cout << (i + 1) * -1;
+        }
+        cout << " ";
     }
-    cout<<endl;
+    cout << endl;
 }
 
-void printOccupancyMetrics(int blockSize, int minGridSize, string funcName){
-    cout<<"--------------------------------------"<<endl;
-    cout<<"Function Name: " << funcName<<endl;
-    cout<<"Block Size: "<<blockSize<<endl;
-    cout<<"Min Grid Size: "<<minGridSize<<endl;
+void printOccupancyMetrics(int blockSize, int minGridSize, string funcName)
+{
+    cout << "--------------------------------------" << endl;
+    cout << "Function Name: " << funcName << endl;
+    cout << "Block Size: " << blockSize << endl;
+    cout << "Min Grid Size: " << minGridSize << endl;
 }
 
-//print the max block and grid size for all the kernel functions in the program
-void printMaxBlockSize(){
-    int blockSize;   
+// print the max block and grid size for all the kernel functions in the program
+void printMaxBlockSize()
+{
+    int blockSize;
     int minGridSize;
     int max_active_blocks;
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
     int num_sm = 0;
     cudaDeviceGetAttribute(&num_sm, cudaDevAttrMultiProcessorCount, 0);
-    cout<<"Number of Streaming Multiprocessor: " << num_sm<<endl;
+    cout << "Number of Streaming Multiprocessor: " << num_sm << endl;
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, init, 0, 0);
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&max_active_blocks, init, blockSize, 0);
-    cout<<"Maximum active blocks:  " << max_active_blocks<<endl;
-    cout<<"--------------------------------------"<<endl;
-    printOccupancyMetrics(blockSize,minGridSize,"init");
+    cout << "Maximum active blocks:  " << max_active_blocks << endl;
+    cout << "--------------------------------------" << endl;
+    printOccupancyMetrics(blockSize, minGridSize, "init");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, random_casting_int, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"random_casting_int");
+    printOccupancyMetrics(blockSize, minGridSize, "random_casting_int");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, random_casting_float, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"random_casting_float");
+    printOccupancyMetrics(blockSize, minGridSize, "random_casting_float");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, random_casting_parent, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"random_casting_parent");
+    printOccupancyMetrics(blockSize, minGridSize, "random_casting_parent");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, evaluation, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"evaluation");
+    printOccupancyMetrics(blockSize, minGridSize, "evaluation");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, mutation, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"mutation");
+    printOccupancyMetrics(blockSize, minGridSize, "mutation");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, crossover_fixed, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"crossover_fixed");
+    printOccupancyMetrics(blockSize, minGridSize, "crossover_fixed");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, crossover_uniform, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"crossover_uniform");
+    printOccupancyMetrics(blockSize, minGridSize, "crossover_uniform");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, selection_elitism, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"selection_elitism");
+    printOccupancyMetrics(blockSize, minGridSize, "selection_elitism");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, selection_wheel, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"selection_wheel");
+    printOccupancyMetrics(blockSize, minGridSize, "selection_wheel");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, internalReOrder, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"internalReOrder");
+    printOccupancyMetrics(blockSize, minGridSize, "internalReOrder");
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, migration, 0, 0);
-    printOccupancyMetrics(blockSize,minGridSize,"migration");
-    cout<<"--------------------------------------"<<endl;
+    printOccupancyMetrics(blockSize, minGridSize, "migration");
+    cout << "--------------------------------------" << endl;
 }
 
 int main(int argc, char **argv)
@@ -488,77 +504,90 @@ int main(int argc, char **argv)
     // printMaxBlockSize();
     srand(time(0));
     auto start = high_resolution_clock::now();
-    ofstream ResultArrFile("resultArr.txt");
     string fileName = "";
-    if (argc ==2) fileName = argv[1];
-    else if (argc>2) std::invalid_argument("too many arguments");
-    else throw std::invalid_argument("no file specified");
-    if(!debugMode){
-        cout<<"c ------------------------------------"<<endl;
-        cout<<"c CUDA Genetic Algorithm MAXSAT solver"<<endl;
-        cout<<"c ------------------------------------"<<endl;
+    if (argc == 2)
+        fileName = argv[1];
+    else if (argc > 2)
+        std::invalid_argument("too many arguments");
+    else
+        throw std::invalid_argument("no file specified");
+    if (!debugMode)
+    {
+        cout << "c ------------------------------------" << endl;
+        cout << "c CUDA Genetic Algorithm MAXSAT solver" << endl;
+        cout << "c ------------------------------------" << endl;
     }
-    // int device = 0; // Use device 0
-    // cudaDeviceProp prop;
-    // cudaGetDeviceProperties(&prop, device);
-    // std::cout << "Max threads per block: " << prop.maxThreadsPerBlock << std::endl;
 
     int h_maxBit = 0;
-    int h_satSize =0;
+    int h_satSize = 0;
     short *h_satSets = readSatSets(fileName, &h_maxBit, &h_satSize);
-    cudaMemcpyToSymbol(d_maxBit, &h_maxBit , 1 * sizeof(int));
-    cudaMemcpyToSymbol(d_satSize, &h_satSize , 1 * sizeof(int));
+    cudaMemcpyToSymbol(d_maxBit, &h_maxBit, 1 * sizeof(int));
+    cudaMemcpyToSymbol(d_satSize, &h_satSize, 1 * sizeof(int));
     cudaMemcpyToSymbol(d_satSets, h_satSets, h_satSize * SATCLAUSES * sizeof(short));
-    
 
     curandState_t *d_parent_states;
     gpuErrchk(cudaMalloc((void **)&d_parent_states, N * sizeof(curandState_t)));
     unsigned long long int *d_parents;
     gpuErrchk(cudaMalloc(&d_parents, N * sizeof(unsigned long long int)));
 
+    // initialise states for parents
     init<<<N / threadsPerBlock, threadsPerBlock>>>(d_parent_states, N);
     gpuErrchk(cudaPeekAtLastError());
+
+    // initialise values for parents
     random_casting_parent<<<N / threadsPerBlock, threadsPerBlock>>>(d_parent_states, d_parents, N);
     gpuErrchk(cudaPeekAtLastError());
 
-    // while loop starts here
+    // initialise an array to store fitness values of parents in device
     unsigned int *d_parentVals;
     gpuErrchk(cudaMalloc(&d_parentVals, N * sizeof(unsigned int)));
+
+     // initialise arrays to store fitness values of parents in host
     unsigned long long int *h_parents;
-    unsigned int *h_parentVals;
     h_parents = (unsigned long long int *)malloc(N * sizeof(unsigned long long int));
+
+    // initialise an array to store fitness values of parents in device
+    unsigned int *h_parentVals;
     h_parentVals = (unsigned int *)malloc(N * sizeof(unsigned int));
     unsigned long long int *d_block_bests;
     gpuErrchk(cudaMalloc(&d_block_bests, totalBlocksIsland * sizeof(unsigned long long int)));
 
-    curandState_t *d_crossover_states,*d_crossover_length_states, *d_mutation_index_states, *d_mutation_prob_status, *d_selection_prob_status;
-    int *d_crossover_index,*d_crossover_length_index, *d_mutation_index;
-    float *d_selection_prob,*d_mutation_prob;
+    // initialise all the device arrays
+    curandState_t *d_crossover_states, *d_crossover_length_states, *d_mutation_index_states, *d_mutation_prob_status, *d_selection_prob_status;
+    int *d_crossover_index, *d_crossover_length_index, *d_mutation_index;
+    float *d_selection_prob, *d_mutation_prob;
+    // crossover index
     gpuErrchk(cudaMalloc((void **)&d_crossover_states, N * sizeof(curandState_t)));
     gpuErrchk(cudaMalloc(&d_crossover_index, N * sizeof(int)));
+    // crossover length
     gpuErrchk(cudaMalloc((void **)&d_crossover_length_states, N * sizeof(curandState_t)));
-    gpuErrchk(cudaMalloc(&d_crossover_index, N * sizeof(int)));
+    gpuErrchk(cudaMalloc(&d_crossover_length_index, N * sizeof(int)));
+    // mutation index
     gpuErrchk(cudaMalloc((void **)&d_mutation_index_states, N * sizeof(curandState_t)));
     gpuErrchk(cudaMalloc(&d_mutation_index, N * sizeof(int)));
+    // mutation probability
     gpuErrchk(cudaMalloc((void **)&d_mutation_prob_status, N * sizeof(curandState_t)));
     gpuErrchk(cudaMalloc(&d_mutation_prob, N * sizeof(float)));
+    // selection probability
     gpuErrchk(cudaMalloc((void **)&d_selection_prob_status, totalThreadsIsland * sizeof(curandState_t)));
     gpuErrchk(cudaMalloc(&d_selection_prob, N * sizeof(float)));
 
-    cudaMemcpy(h_parents, d_parents, N * sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
+    // variables
     unsigned int res_maxParentVal = 0;
     unsigned long long int res_maxParent = 0;
     auto res_maxTime = start;
     int roundsWithoutImprovement = 0;
     int res_maxRound = 0;
     int roundIndex = 0;
-    // && res_maxParentVal != h_satSize
-    while ((terminationMode && (roundsWithoutImprovement < maxRound) || !terminationMode && (duration<double>(high_resolution_clock::now() - start).count() < maxSecond)))
+
+    // while loop starts here
+    while ((terminationMode && (roundsWithoutImprovement < maxRound)))
     {
-        // evalutaion =get best
         if (roundIndex % roundsPerMigration == (roundsPerMigration / 2))
         {
-            if(debugMode) cout << "<- Migration ->" << endl;
+            // Migration
+            if (debugMode)
+                cout << "<- Migration ->" << endl;
             internalReOrder<<<totalBlocksIsland, threadsPerBlock>>>(d_parents, d_parentVals, totalThreadsIsland);
             gpuErrchk(cudaPeekAtLastError());
             evaluation<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_parentVals, N);
@@ -575,11 +604,13 @@ int main(int argc, char **argv)
         // selection
         if (selectionMode)
         {
+            // Elitism selection
             selection_elitism<<<totalBlocksIsland, threadsPerBlock>>>(d_parents, d_parentVals, d_block_bests, totalThreadsIsland);
             gpuErrchk(cudaPeekAtLastError());
         }
         else
         {
+            // Roulette Wheel Selection
             init<<<totalBlocksIsland, threadsPerBlock>>>(d_selection_prob_status, totalThreadsIsland);
             gpuErrchk(cudaPeekAtLastError());
             random_casting_float<<<totalBlocksIsland, threadsPerBlock>>>(d_selection_prob_status, d_selection_prob, 1, totalThreadsIsland);
@@ -589,6 +620,7 @@ int main(int argc, char **argv)
         }
         gpuErrchk(cudaPeekAtLastError());
 
+        // Find the highest fitness value in that round
         int tempLargestParentIndex = 0;
         unsigned int tempLargestParentValue = 0;
         evaluation<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_parentVals, N);
@@ -597,7 +629,7 @@ int main(int argc, char **argv)
         cudaMemcpy(h_parents, d_parents, N * sizeof(unsigned long long int), cudaMemcpyDeviceToHost);
         for (int i = 0; i < N; i++)
         {
-            // If the chromsome with the highest fitness value in that round is found
+            // If the chromsome with the highest fitness value in that round is found, store the value
             if (h_parentVals[i] > tempLargestParentValue)
             {
                 tempLargestParentValue = h_parentVals[i];
@@ -605,46 +637,41 @@ int main(int argc, char **argv)
             }
         }
 
-       if(debugMode){
-        // print the highest fitness value each round if it is debug mode
-        ResultArrFile << roundIndex << " " << tempLargestParentValue << endl;
-        cout << roundIndex << ". " << "answer: ";
-        cout << tempLargestParentValue << "  parent: ";
-        cout << h_parents[tempLargestParentIndex] << " ";
-        cout << "at " << tempLargestParentIndex << endl;
-       }
+        if (debugMode)
+        {
+            // If it is in debug mode, print the highest fitness value each round
+            cout << roundIndex << ". "
+                 << "answer: ";
+            cout << tempLargestParentValue << "  parent: ";
+            cout << h_parents[tempLargestParentIndex] << " ";
+            cout << "at " << tempLargestParentIndex << endl;
+        }
 
         if (tempLargestParentValue > res_maxParentVal)
         {
-            // If the chromsome with the highest fitness value so far is found
+            // If the chromsome with the highest fitness value so far is found, end the program
             res_maxParentVal = tempLargestParentValue;
             res_maxParent = h_parents[tempLargestParentIndex];
             res_maxRound = roundIndex;
             res_maxTime = high_resolution_clock::now();
             roundsWithoutImprovement = -1;
-            if(!debugMode){
-                if(h_satSize==res_maxParentVal){
+            if (!debugMode)
+            {
+                if (h_satSize == res_maxParentVal)
+                {
                     // If all the clauses are satisfied
-                    cout<< "s OPTIMUM FOUND"<<endl;
-                    cout<< "v ";
-                    printBits(res_maxParent,h_maxBit);
-                    cout<<endl;
+                    cout << "s OPTIMUM FOUND" << endl;
+                    cout << "v ";
+                    printBits(res_maxParent, h_maxBit);
+                    cout << endl;
                     break;
-                }else{
-                    cout<< "o "<< (h_satSize-res_maxParentVal)<<endl;
+                }
+                else
+                {
+                    cout << "o " << (h_satSize - res_maxParentVal) << endl;
                 }
             }
         }
-
-        // needa have another set of random states
-        init<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_index_states, N);
-        gpuErrchk(cudaPeekAtLastError());
-        random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_index_states, d_mutation_index, h_maxBit, N);
-        gpuErrchk(cudaPeekAtLastError());
-        init<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_prob_status, N);
-        gpuErrchk(cudaPeekAtLastError());
-        random_casting_float<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_prob_status, d_mutation_prob, 1, N);
-        gpuErrchk(cudaPeekAtLastError());
 
         // crossover
         if (crossoverMode)
@@ -655,13 +682,15 @@ int main(int argc, char **argv)
             random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, d_crossover_index, h_maxBit, N);
             gpuErrchk(cudaPeekAtLastError());
             crossover_fixed<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_block_bests, d_crossover_index, d_crossover_index, N);
-        }else if (crossoverMode==2){
+        }
+        else if (crossoverMode == 2)
+        {
             // two-point crossover
             init<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, N);
             gpuErrchk(cudaPeekAtLastError());
             random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_states, d_crossover_index, h_maxBit, N);
             gpuErrchk(cudaPeekAtLastError());
-            init<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_length_states,N);
+            init<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_length_states, N);
             gpuErrchk(cudaPeekAtLastError());
             random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_crossover_length_states, d_crossover_length_index, h_maxBit, N);
             gpuErrchk(cudaPeekAtLastError());
@@ -673,7 +702,17 @@ int main(int argc, char **argv)
             crossover_uniform<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_block_bests, N);
         }
         gpuErrchk(cudaPeekAtLastError());
+
         // mutation
+        // initialise new random states and numbers for mutation
+        init<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_index_states, N);
+        gpuErrchk(cudaPeekAtLastError());
+        random_casting_int<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_index_states, d_mutation_index, h_maxBit, N);
+        gpuErrchk(cudaPeekAtLastError());
+        init<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_prob_status, N);
+        gpuErrchk(cudaPeekAtLastError());
+        random_casting_float<<<N / threadsPerBlock, threadsPerBlock>>>(d_mutation_prob_status, d_mutation_prob, 1, N);
+        gpuErrchk(cudaPeekAtLastError());
         mutation<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_mutation_prob, d_mutation_index, mutationMode, mutationKeep, tempLargestParentIndex, N);
         gpuErrchk(cudaPeekAtLastError());
 
@@ -683,10 +722,11 @@ int main(int argc, char **argv)
     /*
         Print Final Result
     */
-    if(debugMode){
+    if (debugMode)
+    {
         cout << "-------------LARGEST PARENT-------------" << endl;
-        cout << "Number of bits : " << h_maxBit<<endl;
-        cout << "SAT Size: "<< h_satSize<<endl;
+        cout << "Number of bits : " << h_maxBit << endl;
+        cout << "SAT Size: " << h_satSize << endl;
         cout << "Best parent: " << res_maxParent << endl;
         cout << "Best parent: " << bitset<64>(res_maxParent).to_string() << endl;
         cout << "Best value: " << res_maxParentVal << endl;
@@ -701,8 +741,10 @@ int main(int argc, char **argv)
         else
             cout << "Roulette Wheel" << endl;
         cout << "Crossover Mode: ";
-        if (crossoverMode)
+        if (crossoverMode==1)
             cout << "Single Point" << endl;
+        else if(crossoverMode==2)
+            cout << "Two-Points" << endl;
         else
             cout << "Uniform" << endl;
         cout << "Mutation Mode: ";
@@ -716,33 +758,33 @@ int main(int argc, char **argv)
         else
             cout << "Time" << endl;
     }
+
     /* Free device memory */
     cudaFree(d_parents);
     cudaFree(d_block_bests);
     cudaFree(d_parentVals);
     cudaFree(d_parent_states);
+    cudaFree(d_selection_prob_status);
     cudaFree(d_crossover_states);
     cudaFree(d_crossover_length_states);
     cudaFree(d_mutation_index_states);
     cudaFree(d_mutation_prob_status);
+    cudaFree(d_selection_prob);
     cudaFree(d_crossover_index);
     cudaFree(d_crossover_length_index);
     cudaFree(d_mutation_index);
     cudaFree(d_mutation_prob);
-    cudaFree(d_selection_prob);
-    cudaFree(d_selection_prob_status);
 
     /* Free host memory */
     free(h_parents);
     free(h_parentVals);
 
-    ResultArrFile.close();
-
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
-
     cout << "Time taken by function: "
          << duration.count() << " microseconds" << endl;
-    if(h_satSize==res_maxParentVal) return 1;
-    else return 0;
+    if (h_satSize == res_maxParentVal)
+        return 1;
+    else
+        return 0;
 }
