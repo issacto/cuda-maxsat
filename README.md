@@ -20,7 +20,7 @@ nvcc  -o main main.cu
 Paste the selected chromosome inside the file and verify the result with the file name specified in the command line.
 ```
 g++ -o verfier verfier.cpp
-./verfier 3 64 <file name>
+./verfier <file name>
 ```
 ## KCL Script
 
