@@ -17,5 +17,5 @@ for d in ./data/ubc-new/*; do
     let "count=count+1"
  fi
 done
-echo "ANSWER"
+echo "Number of unsatisfied clauses:"
 echo  $count

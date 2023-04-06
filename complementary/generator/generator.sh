@@ -1,5 +1,5 @@
 g++ -o generator generator.cpp
-
+# generate ten random cnf files
 for (( n=1; n<=10; n++ ))
 do
     echo "$n round "

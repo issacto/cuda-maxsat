@@ -24,16 +24,16 @@ using namespace std::chrono;
 #define threadsInBlockIsland 32                                                        // number of threads in an island
 #define totalThreadsIsland N / threadsInBlockIsland                                    // number of islands
 #define totalBlocksIsland (totalThreadsIsland + threadsPerBlock - 1) / threadsPerBlock // number of blocks for islands
-#define selectionMode true                                                             // elitism or ranking selection
-#define crossoverMode 2                                                                //  uniform or single-point or two-points crossover
+#define selectionMode true                                                             // elitism or roulette wheel selection
+#define crossoverMode 1                                                                // uniform or single-point or two-point crossover
 #define mutationMode false                                                             // single or double mutation
-#define mutationKeep false                                                             // exempt the best parent to be mutated
+#define mutationKeep false                                                             // exempt the best parent to be mutated; not used
 #define mutationThreshold 0.5                                                          // between 0 and 1
 #define terminationMode true                                                           // terminate by rounds without improvement or by time
 #define maxRound 20000
 #define debugMode false // print rounds or print MAXSAT evaluation format
 
-// https://stackoverflow.com/questions/65293876/cuda-gpuassert-an-illegal-memory-access-was-encountered
+// refer to https://stackoverflow.com/questions/65293876/cuda-gpuassert-an-illegal-memory-access-was-encountered
 #define gpuErrchk(ans)                        \
     {                                         \
         gpuAssert((ans), __FILE__, __LINE__); \
@@ -66,22 +66,22 @@ __global__ void init(curandState_t *states, int max)
 }
 
 // initialise a random integer number
-__global__ void random_casting_int(curandState_t *states, int *numbers, int maxIndex, int max)
+__global__ void random_casting_int(curandState_t *states, int *numbers, int maxNumber, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     if (max > id)
     {
-        numbers[id] = curand_uniform(&states[id]) * maxIndex;
+        numbers[id] = curand_uniform(&states[id]) * maxNumber;
     }
 }
 
 // initialise a random float number
-__global__ void random_casting_float(curandState_t *states, float *numbers, int maxIndex, int max)
+__global__ void random_casting_float(curandState_t *states, float *numbers, int maxNumber, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     if (max > id)
     {
-        numbers[id] = curand_uniform(&states[id]) * maxIndex;
+        numbers[id] = curand_uniform(&states[id]) * maxNumber;
     }
 }
 
@@ -119,6 +119,7 @@ __global__ void evaluation(unsigned long long int *parents, unsigned int *parent
     }
 }
 
+// one-bit and two-bit flip mutation
 __global__ void mutation(unsigned long long int *parents, float *mutateProb, int *mutateIndex, bool mode, bool isMutationKeep, int bestIndex, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -177,7 +178,7 @@ __global__ void mutation(unsigned long long int *parents, float *mutateProb, int
     }
 }
 
-// crossover for single-point and two-points crossover
+// single-point and two-points crossover
 __global__ void crossover_fixed(unsigned long long int *parents, unsigned long long int *blockBestParents, int *splitIndex, int *length, int max)
 {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -356,6 +357,7 @@ __global__ void migration(unsigned long long int *parents, int max)
     }
 }
 
+// read problem set
 short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
 {
     string tempText;
@@ -364,6 +366,7 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
     ifstream secondFileRead(fileName);
     int tmpSatSize = 0;
     int tmpMaxBit = 0;
+    // read the problem definition of the file
     while (getline(firstFileRead, tempText))
     {
         // process each line
@@ -378,10 +381,12 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
                 // process strings splitted by space in a line
                 if (tmpIndex == 2)
                 {
+                    // get the number of variables
                     tmpMaxBit = atoi(s.c_str());
                 }
                 else if (tmpIndex == 3)
                 {
+                    // get the number of clauses
                     tmpSatSize = atoi(s.c_str());
                 }
                 if (!(tmpIndex >= 2 && atoi(s.c_str()) == 0))
@@ -393,6 +398,7 @@ short *readSatSets(string fileName, int *h_maxBit, int *h_satSize)
     bool isCount = false;
     int index = 0;
     short *h_satSets = new short[tmpSatSize * SATCLAUSES];
+    // read the file to get the the literals and clauses of the problem sets
     while (getline(secondFileRead, tempText))
     {
         // process each line
@@ -542,7 +548,7 @@ int main(int argc, char **argv)
     unsigned int *d_parentVals;
     gpuErrchk(cudaMalloc(&d_parentVals, N * sizeof(unsigned int)));
 
-     // initialise arrays to store fitness values of parents in host
+    // initialise arrays to store fitness values of parents in host
     unsigned long long int *h_parents;
     h_parents = (unsigned long long int *)malloc(N * sizeof(unsigned long long int));
 
@@ -592,7 +598,6 @@ int main(int argc, char **argv)
             gpuErrchk(cudaPeekAtLastError());
             evaluation<<<N / threadsPerBlock, threadsPerBlock>>>(d_parents, d_parentVals, N);
             gpuErrchk(cudaPeekAtLastError());
-            /* migration */
             migration<<<totalBlocksIsland, threadsPerBlock>>>(d_parents, totalThreadsIsland);
             gpuErrchk(cudaPeekAtLastError());
         }
@@ -741,9 +746,9 @@ int main(int argc, char **argv)
         else
             cout << "Roulette Wheel" << endl;
         cout << "Crossover Mode: ";
-        if (crossoverMode==1)
+        if (crossoverMode == 1)
             cout << "Single Point" << endl;
-        else if(crossoverMode==2)
+        else if (crossoverMode == 2)
             cout << "Two-Points" << endl;
         else
             cout << "Uniform" << endl;
