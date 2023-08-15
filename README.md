@@ -2,6 +2,9 @@
 
 An island-based genetic algorithm using Nvidia’s CUDA is purposed to solve 3-MAXSAT problems.
 
+## Requirement
+Maximum 64 variables
+
 ## Data
 Download 3-SAT benchmark data at https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html
 <br /> Alternatively, generate a MAXSAT problem with the generator.
