@@ -4,10 +4,13 @@ An island-based genetic algorithm using Nvidia’s CUDA is purposed to solve 3-M
 
 ## Methods
 
+
+|||
 | ------------- |:-------------:|
 | Selection     | Elitism, Roulette Wheel     |
 | Crossover     | Single fixed, Double fixed, Uniform  |
 | Mutation      | Single, Double     |
+
 
 ## Limitation
 Maximum 64 variables
