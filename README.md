@@ -4,7 +4,6 @@ An island-based genetic algorithm using Nvidia’s CUDA is purposed to solve 3-M
 
 ## Methods
 
-| Method  |  |
 | ------------- |:-------------:|
 | Selection     | Elitism, Roulette Wheel     |
 | Crossover     | Single fixed, Double fixed, Uniform  |
