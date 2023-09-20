@@ -1,6 +1,6 @@
 # CUDA-MAXSAT
 
-An island-based genetic algorithm using Nvidia’s CUDA is purposed to solve 3-MAXSAT problems.
+An island-based genetic algorithm using Nvidia’s CUDA is purposed to solve 3-MAXSAT problems. Experiments showed that it obtains better performance than state-of-the-art MaxSAT solvers to solve problem sets with high clauses-to-variables ratios within a short period.
 
 ## Methods
 
